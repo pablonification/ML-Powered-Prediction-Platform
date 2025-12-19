@@ -1,0 +1,28 @@
+# =============================================================================
+# Docker Compose for Backend Only (aaPanel / STB)
+# =============================================================================
+# Usage: docker compose -f docker-compose.backend.yml up -d
+# =============================================================================
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: prediksi-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - model_data:/app/app/models
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  model_data:
+    driver: local
