@@ -96,7 +96,14 @@ def train_model(model_id: str, target_col: str, training_data: list):
 
       # Save the encoder alongside the model
       save_path = MODEL_DIR / f"{model_id}.pkl"
-      joblib.dump({"model": model, "encoder": le, "type": "classification"}, save_path)
+      feature_cols = list(X.columns)
+      joblib.dump({
+        "model": model, 
+        "encoder": le, 
+        "type": "classification",
+        "feature_cols": feature_cols,
+        "target_col": target_col
+      }, save_path)
 
     else:
       # Regression
@@ -105,18 +112,32 @@ def train_model(model_id: str, target_col: str, training_data: list):
       model.fit(X, y_numeric)
 
       save_path = MODEL_DIR / f"{model_id}.pkl"
-      joblib.dump({"model": model, "type": "regression"}, save_path)
+      feature_cols = list(X.columns)
+      joblib.dump({
+        "model": model, 
+        "type": "regression",
+        "feature_cols": feature_cols,
+        "target_col": target_col
+      }, save_path)
 
-    # ------------------------------------------------------------
-    # API SHOULD SET STATUS = "ready" AFTER TRAINING
-    # ------------------------------------------------------------
-    update_status(model_id, "ready")
+    # Update metadata with model info
+    meta = load_metadata()
+    meta[model_id] = {
+      "status": "ready",
+      "updated_at": datetime.utcnow().isoformat() + "Z",
+      "type": "classification" if is_classification else "regression",
+      "feature_cols": feature_cols,
+      "target_col": target_col
+    }
+    save_metadata(meta)
 
     return {
       "id": model_id,
       "status": "ready",
       "created_at": datetime.utcnow().isoformat() + "Z",
-      "type": "classification" if is_classification else "regression"
+      "type": "classification" if is_classification else "regression",
+      "feature_cols": feature_cols,
+      "target_col": target_col
     }
 
   except Exception as e:
@@ -170,14 +191,23 @@ def predict(model_id: str, input_data: list):
 #   DELETE MODEL
 # ==========================================================
 def delete_model(model_id: str):
-  path = MODEL_DIR / f"{model_id}.pkl"
-  if not path.exists():
-    return {"error": "not_found"}
-
-  path.unlink()
-
+  """
+  Delete a model and its metadata.
+  Allows deletion of models in any status (queued, training, ready, failed).
+  """
   meta = load_metadata()
+  
+  # Check if model exists in metadata
+  if model_id not in meta:
+    return {"error": "not_found"}
+  
+  # Delete .pkl file if it exists (for ready/failed models)
+  path = MODEL_DIR / f"{model_id}.pkl"
+  if path.exists():
+    path.unlink()
+  
+  # Remove from metadata
   meta.pop(model_id, None)
   save_metadata(meta)
-
+  
   return {"status": "deleted"}

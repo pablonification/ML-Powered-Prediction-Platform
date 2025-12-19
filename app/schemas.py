@@ -39,6 +39,8 @@ class ModelStatus(BaseModel):
     status: str = Field(..., description="queued | training | ready | failed | not_found")
     updated_at: Optional[str] = Field(None, description="Last updated (ISO 8601)")
     model_type: Optional[str] = Field(None, description="classification | regression")
+    feature_cols: Optional[list[str]] = Field(None, description="Feature columns used for training")
+    target_col: Optional[str] = Field(None, description="Target column name")
 
 
 class ModelListResponse(BaseModel):
