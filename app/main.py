@@ -1,7 +1,7 @@
 # main.py
 """
+Predictia – 8EH Radio ITB Integrated API
 FastAPI application entry point.
-Exposes ml_pipeline.py as HTTP REST API.
 
 Run:
     uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -25,6 +25,12 @@ from .schemas import (
     HealthResponse,
     ErrorResponse,
     DeleteResponse,
+    SimilarityCheckRequest,
+    SimilarityCheckResponse,
+    SocialCaptionRequest,
+    SocialCaptionResponse,
+    SummarizeRequest,
+    SummarizeResponse,
 )
 from .ml_pipeline import (
     train_model,
@@ -34,32 +40,40 @@ from .ml_pipeline import (
     delete_model,
     load_metadata,
 )
+from .content_service import (
+    check_similarity,
+    generate_social_caption,
+    summarize_text,
+)
 
 
 # App Initialization
 
 app = FastAPI(
-    title="Prediksi ML API",
+    title="Predictia – 8EH Radio ITB Integrated API",
     description="""
-## Kaggle-style Machine Learning Platform API
+## Integrated API Documentation
 
-Upload CSV data to train ML models and make predictions.
+**Integration Strategy:**
+* **Predictia (AI):** Agnostic endpoints for ML training and prediction.
+* **8EH Radio (Content):** Content services with Gemini AI.
+
+**Specific Logic:**
+* **Training:** Uses POST /training. Multivalued columns are dropped.
+* **Prediction:** Uses POST /predictions/{model_id}.
 
 ### Features
-- **Model Training**: Auto-build classification/regression models from CSV
+- **Model Training**: Auto-build classification/regression models from data
 - **Prediction**: Generate predictions with trained models
-- **Model Management**: List, check status, delete models
+- **Content Similarity**: Check content against existing corpus
+- **Social Captions**: Generate platform-specific social media captions
+- **Summarization**: AI-powered text summarization
 
 ### Integration Partners
-- **Jelita Frontend**: CSV upload UI
-- **8EH Radio**: Listener prediction
-
-### Developers
-- **ML Pipeline**: Faiz
-- **API & Deploy**: Ryota
+- **8EH Radio ITB**: Content management and prediction
     """,
-    version="1.0.0",
-    contact={"name": "Prediksi Team"},
+    version="1.7.0",
+    contact={"name": "Predictia Team"},
 )
 
 
@@ -94,7 +108,7 @@ async def health_check():
     return HealthResponse(
         status="ok",
         timestamp=datetime.utcnow().isoformat() + "Z",
-        version="1.0.0"
+        version="1.7.0"
     )
 
 
@@ -124,17 +138,20 @@ async def list_models():
     "/training",
     response_model=TrainModelResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    tags=["Training"],
-    summary="Start model training",
+    tags=["Predictia"],
+    summary="Train AI Model",
     responses={
-        202: {"description": "Training started"},
+        202: {"description": "Training queued"},
         409: {"description": "Model ID already exists", "model": ErrorResponse},
     }
 )
 async def create_model(request: TrainModelRequest, background_tasks: BackgroundTasks):
     """
-    Start async model training.
-    Returns 202 Accepted immediately. Poll GET /models/{id} for status.
+    Accepts any dataset to train the model.
+    
+    **Data Processing Note:** Multivalued columns (arrays, lists, nested objects) 
+    will be automatically **dropped** during preprocessing. Only flat fields 
+    (strings, numbers, booleans) are used for training.
     """
     model_id = request.id
 
@@ -223,15 +240,18 @@ async def remove_model(model_id: str):
 @app.post(
     "/predictions/{model_id}",
     response_model=PredictionResponse,
-    tags=["Predictions"],
-    summary="Make prediction",
+    tags=["Predictia"],
+    summary="Make Prediction",
     responses={
         404: {"description": "Model not found", "model": ErrorResponse},
         422: {"description": "Model not ready", "model": ErrorResponse},
     }
 )
 async def make_prediction(model_id: str, request: PredictionRequest):
-    """Generate predictions using a trained model."""
+    """
+    Predicts target variable using a trained model.
+    Multivalued columns in input_data are automatically dropped.
+    """
     info = get_status(model_id)
     current_status = info.get("status")
 
@@ -260,10 +280,100 @@ async def make_prediction(model_id: str, request: PredictionRequest):
         )
 
     return PredictionResponse(
-        model_id=model_id,
-        predictions=result["results"],
-        count=len(result["results"])
+        predictions=result["predictions"]
     )
+
+
+# ==========================================================
+# CONTENT SERVICES (Gemini AI)
+# ==========================================================
+
+# Similarity Check
+
+@app.post(
+    "/content/similarity-check",
+    response_model=SimilarityCheckResponse,
+    tags=["Predictia"],
+    summary="Check Content Similarity",
+    responses={
+        500: {"description": "Similarity check failed", "model": ErrorResponse},
+    }
+)
+async def similarity_check(request: SimilarityCheckRequest):
+    """
+    Check similarity between two provided contents.
+    Uses Gemini AI to analyze semantic similarity and originality.
+    Returns detailed analysis including similarity level, originality assessment, and explanation.
+    """
+    try:
+        result = await check_similarity(request.content_1, request.content_2)
+        return SimilarityCheckResponse(
+            is_similar=result["is_similar"],
+            similarity_level=result["similarity_level"],
+            originality_assessment=result["originality_assessment"],
+            detailed_analysis=result["detailed_analysis"]
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "similarity_check_failed", "message": str(e)}
+        )
+
+
+# Social Caption Generation
+
+@app.post(
+    "/content/social-caption",
+    response_model=SocialCaptionResponse,
+    tags=["Predictia"],
+    summary="Generate Caption",
+    responses={
+        500: {"description": "Caption generation failed", "model": ErrorResponse},
+    }
+)
+async def social_caption(request: SocialCaptionRequest):
+    """
+    Generate social media caption for content.
+    Uses Gemini AI to create platform-specific engaging captions.
+    """
+    try:
+        result = await generate_social_caption(
+            request.platform, 
+            request.title, 
+            request.description
+        )
+        return SocialCaptionResponse(caption=result["caption"])
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "caption_generation_failed", "message": str(e)}
+        )
+
+
+# Text Summarization
+
+@app.post(
+    "/summarize",
+    response_model=SummarizeResponse,
+    tags=["Predictia"],
+    summary="Summarize Text",
+    responses={
+        500: {"description": "Summarization failed", "model": ErrorResponse},
+    }
+)
+async def summarize(request: SummarizeRequest):
+    """
+    Summarize text content.
+    Uses Gemini AI to generate concise summaries.
+    """
+    try:
+        result = await summarize_text(request.content)
+        return SummarizeResponse(summary=result["summary"])
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "summarization_failed", "message": str(e)}
+        )
 
 
 # Root
@@ -271,4 +381,4 @@ async def make_prediction(model_id: str, request: PredictionRequest):
 @app.get("/", tags=["System"], include_in_schema=False)
 async def root():
     """Redirect to docs."""
-    return {"message": "Welcome to Prediksi ML API", "docs": "/docs", "health": "/health"}
+    return {"message": "Welcome to Predictia API", "docs": "/docs", "health": "/health", "version": "1.7.0"}

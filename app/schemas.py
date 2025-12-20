@@ -1,37 +1,111 @@
 # schemas.py
 """
 Pydantic schema definitions for API request/response validation.
+Aligned with Predictia – 8EH Radio ITB Integrated API v1.7.0
 """
 
 from pydantic import BaseModel, Field
 from typing import Optional, Any
 
 
-# Training Request/Response
+# ==========================================================
+# FLOW 1: TRAINING
+# ==========================================================
 
 class TrainModelRequest(BaseModel):
-    """POST /models request body."""
-    id: str = Field(..., description="Unique model identifier", examples=["listener-prediction-v1"])
-    target_col: str = Field(..., description="Target column name", examples=["will_churn"])
+    """POST /training request body."""
+    id: str = Field(..., description="Unique model identifier", examples=["8eh-blog-engagement-v1"])
+    target_col: str = Field(..., description="Target column name", examples=["readercount"])
     training_data: list[dict[str, Any]] = Field(
         ...,
-        description="Training data as list of dicts (CSV rows)",
-        min_length=10,
+        description="Training data as list of dicts. Multivalued columns (arrays, nested objects) are automatically dropped.",
+        min_length=1,
         examples=[[
-            {"age": 25, "hours_listened": 10, "will_churn": 0},
-            {"age": 30, "hours_listened": 5, "will_churn": 1}
+            {"id": "clx123abc", "title": "Mengenal Lebih Dekat 8EH Radio ITB", "category": "News", "readTime": "5 min read", "readercount": 4521},
+            {"id": "clx987xyz", "title": "Top 10 Indie Bands", "category": "Music", "readTime": "8 min read", "readercount": 3105}
         ]]
     )
 
 
 class TrainModelResponse(BaseModel):
-    """POST /models response body."""
+    """POST /training response body (202 Accepted)."""
     id: str = Field(..., description="Model ID")
     status: str = Field(..., description="Current status", examples=["queued", "training", "ready", "failed"])
     message: str = Field(..., description="Status message")
 
 
-# Model Status
+# ==========================================================
+# FLOW 2: PREDICTION
+# ==========================================================
+
+class PredictionRequest(BaseModel):
+    """POST /predictions/{model_id} request body."""
+    input_data: list[dict[str, Any]] = Field(
+        ...,
+        description="Input data for prediction (without target column)",
+        min_length=1,
+        examples=[[
+            {"id": "clx444new", "title": "Review: Jazz Festival 2024", "category": "Music", "readTime": "7 min read"}
+        ]]
+    )
+
+
+class PredictionResponse(BaseModel):
+    """POST /predictions/{model_id} response body."""
+    predictions: list[Any] = Field(..., description="Prediction results", examples=[[1850]])
+
+
+# ==========================================================
+# FLOW 3: SIMILARITY CHECK
+# ==========================================================
+
+class SimilarityCheckRequest(BaseModel):
+    """POST /content/similarity-check request body."""
+    content_1: str = Field(..., description="First content to compare", examples=["This is the first article about radio history."])
+    content_2: str = Field(..., description="Second content to compare", examples=["This article discusses the origins of radio broadcasting."])
+
+
+class SimilarityCheckResponse(BaseModel):
+    """POST /content/similarity-check response body."""
+    is_similar: bool = Field(..., description="Whether the contents are similar", examples=[True])
+    similarity_level: str = Field(..., description="Level of similarity: 'identical', 'very_similar', 'similar', 'somewhat_similar', 'different'", examples=["very_similar"])
+    originality_assessment: str = Field(..., description="Assessment of originality for content_1 compared to content_2", examples=["The first content appears to be an original take on the topic..."])
+    detailed_analysis: str = Field(..., description="Detailed analysis of similarities and differences", examples=["Both contents discuss radio history but from different perspectives..."])
+
+
+# ==========================================================
+# FLOW 4: SOCIAL CAPTIONS
+# ==========================================================
+
+class SocialCaptionRequest(BaseModel):
+    """POST /content/social-caption request body."""
+    platform: str = Field(..., description="Target social media platform", examples=["instagram"])
+    title: str = Field(..., description="Content title", examples=["Morning Show Episode 1"])
+    description: str = Field(..., description="Content description", examples=["Full YouTube URL: https://www.youtube.com/watch?v=dQw4w9WgXcQ"])
+
+
+class SocialCaptionResponse(BaseModel):
+    """POST /content/social-caption response body."""
+    caption: str = Field(..., description="Generated social media caption", examples=["Check out the Morning Show! Link in bio. 📺"])
+
+
+# ==========================================================
+# FLOW 5: SUMMARIZATION
+# ==========================================================
+
+class SummarizeRequest(BaseModel):
+    """POST /summarize request body."""
+    content: str = Field(..., description="Content to summarize", examples=["Tune Tracker 2023-10-23. Rank 1: 'Rayuan Perempuan Gila' (stable). Rank 2: 'New Song' (up)."])
+
+
+class SummarizeResponse(BaseModel):
+    """POST /summarize response body."""
+    summary: str = Field(..., description="Generated summary", examples=["Nadin Amizah remains at #1 this week."])
+
+
+# ==========================================================
+# MODEL MANAGEMENT
+# ==========================================================
 
 class ModelStatus(BaseModel):
     """GET /models/{id} response body."""
@@ -49,35 +123,15 @@ class ModelListResponse(BaseModel):
     count: int
 
 
-# Prediction Request/Response
-
-class PredictionRequest(BaseModel):
-    """POST /models/{id}/predict request body."""
-    input_data: list[dict[str, Any]] = Field(
-        ...,
-        description="Input data for prediction (without target column)",
-        min_length=1,
-        examples=[[
-            {"age": 28, "hours_listened": 3},
-            {"age": 45, "hours_listened": 15}
-        ]]
-    )
-
-
-class PredictionResponse(BaseModel):
-    """POST /models/{id}/predict response body."""
-    model_id: str
-    predictions: list[Any] = Field(..., description="Prediction results", examples=[[1, 0]])
-    count: int = Field(..., description="Number of predictions")
-
-
-# Common Responses
+# ==========================================================
+# COMMON RESPONSES
+# ==========================================================
 
 class HealthResponse(BaseModel):
     """GET /health response body."""
     status: str = Field(default="ok")
     timestamp: str
-    version: str = Field(default="1.0.0")
+    version: str = Field(default="1.7.0")
 
 
 class ErrorResponse(BaseModel):

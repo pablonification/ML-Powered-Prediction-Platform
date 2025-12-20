@@ -1,0 +1,338 @@
+openapi: 3.0.3
+info:
+  title: Predictia – 8EH Radio ITB Integrated API
+  version: 1.7.0
+  description: >
+    **Integrated API Documentation**
+
+    **Integration Strategy:**
+    * **Predictia (AI):** Agnostic endpoints.
+    * **8EH Radio (Content):** Strict content schemas.
+    
+    **Specific Logic:**
+    * **Training:** Uses `GET /api/blog`. **Multivalued columns are dropped.**
+    * **Prediction:** Uses `GET /api/newblog`.
+
+servers:
+  - url: https://api.prediksi.my.id
+    description: Predictia AI Server
+  - url: https://8ehradioitb.com
+    description: 8EH Radio ITB Server
+
+tags:
+  - name: Predictia
+    description: Agnostic AI Services
+
+paths:
+
+  #############################################
+  # FLOW 1: TRAINING
+  # Source: GET /api/blog (Historical + readercount)
+  #############################################
+
+  /training:
+    post:
+      tags: [Predictia]
+      summary: Train AI Model
+      description: >
+        Accepts any dataset to train the model.
+        
+        **Data Processing Note:** Multivalued columns (arrays, lists, nested objects) will be automatically **dropped** during preprocessing. Only flat fields (strings, numbers, booleans) are used for training.
+
+        **Coupling Example:** Consumes `BlogPostWithMetrics` from 8EH. Fields like `tags` (array) and `authors` (nested objects) are dropped, while flat fields like `title`, `category`, `readTime`, and `readercount` are preserved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, target_col, training_data]
+              properties:
+                id: { type: string }
+                target_col: { type: string }
+                training_data: 
+                  type: array
+                  items: { type: object, additionalProperties: true }
+              # COUPLED EXAMPLE: Matches GET /api/blog
+              example:
+                id: "8eh-blog-engagement-v1"
+                target_col: "readercount"
+                training_data:
+                  - id: "clx123abc"
+                    title: "Mengenal Lebih Dekat 8EH Radio ITB"
+                    category: "News"
+                    readTime: "5 min read"
+                    readercount: 4521
+                    # 'tags' and 'authors' (arrays) would be present here but dropped by the AI
+                  - id: "clx987xyz"
+                    title: "Top 10 Indie Bands"
+                    category: "Music"
+                    readTime: "8 min read"
+                    readercount: 3105
+      responses:
+        "202":
+          description: Training queued
+
+  #############################################
+  # FLOW 2: PREDICTION
+  # Source: GET /api/newblog (New - NO readercount)
+  #############################################
+
+  /predictions/{model_id}:
+    post:
+      tags: [Predictia]
+      summary: Make Prediction
+      description: >
+        Predicts target variable.
+        **Coupling Example:** Consumes `BlogPostStandard` (missing `readercount`) from 8EH.
+      parameters:
+        - name: model_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: "8eh-blog-engagement-v1"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input_data]
+              properties:
+                input_data: 
+                  type: array
+                  items: { type: object, additionalProperties: true }
+              # COUPLED EXAMPLE: Matches GET /api/newblog
+              example:
+                input_data:
+                  - id: "clx444new"
+                    title: "Review: Jazz Festival 2024"
+                    category: "Music"
+                    readTime: "7 min read"
+                    # readercount is ABSENT
+      responses:
+        "200":
+          description: Prediction results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  predictions: { type: array, items: { type: number }, example: [1850] }
+
+ 
+  #############################################
+  # FLOW 3: SIMILARITY CHECK
+  # Source: GET /api/podcast
+  #############################################
+
+  /content/similarity-check:
+    post:
+      tags: [Predictia]
+      summary: Check Content Similarity
+      description: >
+        **Coupling Example:** Checks new text against `PodcastEpisode` data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, content]
+              properties:
+                title: { type: string }
+                content: { type: string }
+              example:
+                title: "New Podcast: Radio History"
+                content: "Script regarding the origins of the station..."
+      responses:
+        "200":
+          description: Similarity result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  similarity_score: { type: number, example: 0.92 }
+                  matched_source: { type: string, example: "https://8ehradioitb.com/api/podcast/clx456def" }
+
+  #############################################
+  # FLOW 4: SOCIAL CAPTIONS
+  # Source: GET /api/program-videos
+  #############################################
+
+  /content/social-caption:
+    post:
+      tags: [Predictia]
+      summary: Generate Caption
+      description: >
+        **Coupling Example:** Uses `ProgramVideo` metadata to generate captions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, title, description]
+              properties:
+                platform: { type: string }
+                title: { type: string }
+                description: { type: string }
+              example:
+                platform: "instagram"
+                title: "Morning Show Episode 1"
+                description: "Full YouTube URL: https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+      responses:
+        "200":
+          description: Caption generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  caption: { type: string, example: "Check out the Morning Show! Link in bio. 📺" }
+
+  #############################################
+  # FLOW 5: SUMMARIZATION
+  # Source: GET /api/tune-tracker
+  #############################################
+
+  /summarize:
+    post:
+      tags: [Predictia]
+      summary: Summarize Text
+      description: >
+        **Coupling Example:** Summarizes `TuneTracker` chart data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+              example:
+                content: "Tune Tracker 2023-10-23. Rank 1: 'Rayuan Perempuan Gila' (stable). Rank 2: 'New Song' (up)."
+      responses:
+        "200":
+          description: Summary generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary: { type: string, example: "Nadin Amizah remains at #1 this week." }
+
+#############################################
+# COMPONENT SCHEMAS
+#############################################
+components:
+  schemas:
+    # ----------------------------------------------------
+    # BLOG POST (STANDARD) - Used in /api/newblog
+    # Matches provided docs exactly. NO readercount.
+    # ----------------------------------------------------
+    BlogPostStandard:
+      type: object
+      properties:
+        id: { type: string, example: "clx123abc" }
+        title: { type: string, example: "Mengenal Lebih Dekat 8EH Radio ITB" }
+        slug: { type: string, example: "mengenal-lebih-dekat-8eh-radio-itb" }
+        content: { type: string, example: "<p>Full HTML content...</p>" }
+        description: { type: string, nullable: true, example: "Artikel tentang sejarah..." }
+        readTime: { type: string, nullable: true, example: "5 min read" }
+        category: { type: string, nullable: true, example: "News" }
+        mainImage: { type: string, nullable: true, example: "https://r2.8ehradioitb.com/blog/cover.jpg" }
+        tags: 
+          type: array
+          items: { type: string }
+          example: ["radio", "itb", "campus"]
+        isFeatured: { type: boolean, example: false }
+        authors:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, example: "author123" }
+              user:
+                type: object
+                properties:
+                  id: { type: string, example: "user123" }
+                  name: { type: string, example: "John Doe" }
+                  image: { type: string, example: "https://example.com/avatar.jpg" }
+        createdAt: { type: string, format: date-time, example: "2024-01-15T10:00:00.000Z" }
+        updatedAt: { type: string, format: date-time, example: "2024-01-15T10:30:00.000Z" }
+
+    # ----------------------------------------------------
+    # BLOG POST (WITH METRICS) - Used in /api/blog
+    # Identical to Standard + readercount
+    # ----------------------------------------------------
+    BlogPostWithMetrics:
+      type: object
+      properties:
+        id: { type: string, example: "clx123abc" }
+        title: { type: string, example: "Mengenal Lebih Dekat 8EH Radio ITB" }
+        slug: { type: string, example: "mengenal-lebih-dekat-8eh-radio-itb" }
+        # ADDED FIELD FOR AI TRAINING
+        readercount:
+          type: integer
+          description: Total readers/views. Target variable for AI.
+          example: 4521
+        content: { type: string, example: "<p>Full HTML content...</p>" }
+        description: { type: string, nullable: true, example: "Artikel tentang sejarah..." }
+        readTime: { type: string, nullable: true, example: "5 min read" }
+        category: { type: string, nullable: true, example: "News" }
+        mainImage: { type: string, nullable: true, example: "https://r2.8ehradioitb.com/blog/cover.jpg" }
+        tags: 
+          type: array
+          items: { type: string }
+          example: ["radio", "itb", "campus"]
+        isFeatured: { type: boolean, example: false }
+        authors:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, example: "author123" }
+              user:
+                type: object
+                properties:
+                  id: { type: string, example: "user123" }
+                  name: { type: string, example: "John Doe" }
+                  image: { type: string, example: "https://example.com/avatar.jpg" }
+        createdAt: { type: string, format: date-time, example: "2024-01-15T10:00:00.000Z" }
+        updatedAt: { type: string, format: date-time, example: "2024-01-15T10:30:00.000Z" }
+
+    # ----------------------------------------------------
+    # PODCAST EPISODE
+    # ----------------------------------------------------
+    PodcastEpisode:
+      type: object
+      properties:
+        id: { type: string, example: "clx456def" }
+        title: { type: string, example: "Episode 1: Perjalanan 8EH Radio" }
+        subtitle: { type: string, nullable: true, example: "Sejarah dan perkembangan radio..." }
+        description: { type: string, example: "Podcast episode pertama..." }
+        date: { type: string, nullable: true, example: "2024-01-20" }
+        duration: { type: string, nullable: true, example: "45:30" }
+        audioUrl: { type: string, example: "podcasts/episode-1.mp3" }
+        image: { type: string, nullable: true, example: "/api/podcast/podcasts/cover-1.jpg" }
+        coverImage: { type: string, nullable: true, example: "/api/podcast/podcasts/cover-1.jpg" }
+        authorId: { type: string, example: "user123" }
+        createdAt: { type: string, format: date-time, example: "2024-01-20T14:00:00.000Z" }
+        updatedAt: { type: string, format: date-time, example: "2024-01-20T14:00:00.000Z" }
+
+    # ----------------------------------------------------
+    # PROGRAM VIDEO
+    # ----------------------------------------------------
+    ProgramVideo:
+      type: object
+      properties:
+        id: { type: string, example: "clx789ghi" }
+        title: { type: string, example: "Morning Show Episode 1" }
+        link: { type: string, example: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }
+        thumbnail: { type: string, example: "/api/proxy-audio?key=thumbnails/morning-show-1.jpg" }
+        thumbnailKey: { type: string, nullable: true, example: "thumbnails/morning-show-1.jpg" }
+        createdAt: { type: string, format: date-time, example: "2024-01-25T08:00:00.000Z" }
+        updatedAt: { type: string, format: date-time, example: "2024-01-25T08:00:00.000Z" }
