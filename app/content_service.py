@@ -101,7 +101,7 @@ Analyze these texts and return a JSON object with the following fields:
 Respond ONLY with valid JSON, no markdown formatting or code blocks."""
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-flash-lite-latest",
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.2,
