@@ -115,6 +115,8 @@ class ModelStatus(BaseModel):
     model_type: Optional[str] = Field(None, description="classification | regression")
     feature_cols: Optional[list[str]] = Field(None, description="Feature columns used for training")
     target_col: Optional[str] = Field(None, description="Target column name")
+    accuracy: Optional[float] = Field(None, description="Model accuracy: accuracy_score for classification, R² score for regression")
+    test_size: Optional[float] = Field(None, description="Proportion of data used for testing (0.0-1.0)")
 
 
 class ModelListResponse(BaseModel):

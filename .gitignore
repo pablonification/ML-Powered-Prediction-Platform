@@ -48,3 +48,6 @@ app/metadata.json
 # Environment variables
 .env
 .env.local
+
+# Laporan
+*.pdf

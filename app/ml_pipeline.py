@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, r2_score
 import joblib
 
 
@@ -170,13 +172,33 @@ def train_model(model_id: str, target_col: str, training_data: list):
         # Usually classification if small number of classes
         is_classification = True
     
-    # Prepare target
+    # ------------------------------------------------------------
+    # Step 3: Train/Test Split for metric calculation
+    # ------------------------------------------------------------
+    test_size = 0.2
+    # Require minimum dataset size for meaningful split
+    if len(X_processed) >= 10:
+      X_train, X_test, y_train, y_test = train_test_split(
+        X_processed, y, test_size=test_size, random_state=42
+      )
+    else:
+      # For very small datasets, train on all data and test on same data
+      X_train = X_test = X_processed
+      y_train = y_test = y
+      test_size = 0.0
+    
+    # Prepare target and train model
     if is_classification:
       # Encode labels for logistic regression
       le = LabelEncoder()
-      y_encoded = le.fit_transform(y)
+      y_train_encoded = le.fit_transform(y_train)
       model = LogisticRegression(max_iter=200)
-      model.fit(X_processed, y_encoded)
+      model.fit(X_train, y_train_encoded)
+      
+      # Calculate accuracy on test set
+      y_test_encoded = le.transform(y_test)
+      y_pred = model.predict(X_test)
+      accuracy = accuracy_score(y_test_encoded, y_pred)
 
       # Save the encoder alongside the model
       save_path = MODEL_DIR / f"{model_id}.pkl"
@@ -191,9 +213,14 @@ def train_model(model_id: str, target_col: str, training_data: list):
 
     else:
       # Regression
-      y_numeric = pd.to_numeric(y, errors="coerce").fillna(0)
+      y_train_numeric = pd.to_numeric(y_train, errors="coerce").fillna(0)
+      y_test_numeric = pd.to_numeric(y_test, errors="coerce").fillna(0)
       model = LinearRegression()
-      model.fit(X_processed, y_numeric)
+      model.fit(X_train, y_train_numeric)
+      
+      # Calculate R² score on test set
+      y_pred = model.predict(X_test)
+      accuracy = r2_score(y_test_numeric, y_pred)
 
       save_path = MODEL_DIR / f"{model_id}.pkl"
       joblib.dump({
@@ -204,14 +231,16 @@ def train_model(model_id: str, target_col: str, training_data: list):
         "target_col": target_col
       }, save_path)
 
-    # Update metadata with model info
+    # Update metadata with model info and metrics
     meta = load_metadata()
     meta[model_id] = {
       "status": "ready",
       "updated_at": datetime.utcnow().isoformat() + "Z",
       "type": "classification" if is_classification else "regression",
       "feature_cols": feature_cols,
-      "target_col": target_col
+      "target_col": target_col,
+      "accuracy": float(accuracy),
+      "test_size": test_size
     }
     save_metadata(meta)
 
@@ -221,7 +250,9 @@ def train_model(model_id: str, target_col: str, training_data: list):
       "created_at": datetime.utcnow().isoformat() + "Z",
       "type": "classification" if is_classification else "regression",
       "feature_cols": feature_cols,
-      "target_col": target_col
+      "target_col": target_col,
+      "accuracy": float(accuracy),
+      "test_size": test_size
     }
 
   except Exception as e:
