@@ -1,3 +1,12 @@
+---
+title: Predictia ML API
+emoji: 🤖
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+---
+
 # ML-Powered Prediction Platform
 
 Kaggle-style Machine Learning Platform API for II3160 Integrated System Technology course.
